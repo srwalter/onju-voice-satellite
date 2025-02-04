@@ -62,7 +62,8 @@ esp32:
   board: esp32-s3-devkitc-1
   framework:
     type: esp-idf
-    version: recommended
+    version: 4.4.8
+    platform_version: 5.4.0
     sdkconfig_options:
       # need to set a s3 compatible board for the adf-sdk to compile
       # board specific code is not used though
