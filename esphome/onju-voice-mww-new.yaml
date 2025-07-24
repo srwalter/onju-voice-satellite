@@ -203,7 +203,11 @@ voice_assistant:
                   - not:
                       speaker.is_playing:
           - lambda: id(va).set_use_wake_word(false);
-          - micro_wake_word.start:
+          - if:
+              condition:
+                  - binary_sensor.is_off: mute_switch
+              then:
+                  - micro_wake_word.start:
     - script.execute: reset_led
   on_error:
     - media_player.play_media: "${error_sound_url}"
@@ -504,24 +508,30 @@ script:
 
   - id: start_wake_word
     then:
-      - if:
-          condition:
-            and:
-              - not:
-                  - voice_assistant.is_running:
-              - lambda: return id(wake_word_engine_location).state == "On device";
-          then:
-            - lambda: id(va).set_use_wake_word(false);
-            - micro_wake_word.start:
-      - if:
-          condition:
-            and:
-              - not:
-                  - voice_assistant.is_running:
-              - lambda: return id(wake_word_engine_location).state == "In Home Assistant";
-          then:
-            - lambda: id(va).set_use_wake_word(true);
-            - voice_assistant.start_continuous:
+     - if:
+         condition:
+           - binary_sensor.is_on: mute_switch
+         then:
+           - script.execute: stop_wake_word
+         else:
+          - if:
+              condition:
+                and:
+                  - not:
+                      - voice_assistant.is_running:
+                  - lambda: return id(wake_word_engine_location).state == "On device";
+              then:
+                - lambda: id(va).set_use_wake_word(false);
+                - micro_wake_word.start:
+          - if:
+              condition:
+                and:
+                  - not:
+                      - voice_assistant.is_running:
+                  - lambda: return id(wake_word_engine_location).state == "In Home Assistant";
+              then:
+                - lambda: id(va).set_use_wake_word(true);
+                - voice_assistant.start_continuous:
   - id: stop_wake_word
     then:
       - if:
@@ -690,7 +700,11 @@ select:
             - lambda: id(va).set_use_wake_word(false);
             - voice_assistant.stop:
             - delay: 500ms
-            - micro_wake_word.start:
+            - if:
+                condition:
+                    - binary_sensor.is_off: mute_switch
+                then:
+                  - micro_wake_word.start:
 
 micro_wake_word:
   on_wake_word_detected:
