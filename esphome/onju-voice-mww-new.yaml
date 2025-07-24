@@ -348,6 +348,11 @@ binary_sensor:
                 condition: media_player.is_playing
                 then:
                   - media_player.stop
+            - if:
+                condition:
+                  switch.is_on: timer_ringing
+                then:
+                  - switch.turn_off: timer_ringing
             - voice_assistant.stop
             - delay: 1s
             - script.execute: reset_led
