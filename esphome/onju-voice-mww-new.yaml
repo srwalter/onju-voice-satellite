@@ -150,7 +150,10 @@ voice_assistant:
   microphone:
     microphone: onju_microphone
     channels: 0
+    gain_factor: 4
   media_player: onju_out
+  noise_suppression_level: 2
+  auto_gain: 31dBFS
   on_listening:
     - light.turn_on:
         id: top_led
@@ -167,6 +170,14 @@ voice_assistant:
         green: 20%
         brightness: 70%
         effect: processing
+  on_tts_start:
+    - light.turn_on:
+        id: top_led
+        blue: 100%
+        red: 0%
+        green: 0%
+        brightness: 100%
+        effect: none
   on_tts_end:
     - light.turn_on:
         id: top_led
@@ -175,48 +186,25 @@ voice_assistant:
         green: 100%
         effect: speaking
   on_end:
+    # Handle the "nevermind" case where there is no announcement
     - wait_until:
-        not:
-          media_player.is_playing:
-    - script.execute: reset_led
+        condition:
+          - media_player.is_announcing:
+        timeout: 0.5s
+    # Restart only mWW if enabled; streaming wake words automatically restart
     - if:
         condition:
-          and:
-            - switch.is_on: use_wake_word
-            - binary_sensor.is_off: mute_switch
+          - lambda: return id(wake_word_engine_location).state == "On device";
         then:
-          - micro_wake_word.start
-  on_timer_started:
-    - light.turn_on:
-        id: top_led
-        effect: random_twinkle
-  on_timer_finished:
-    - media_player.play_media: "${timer_finished_sound_url}"
-    - light.turn_on:
-        id: top_led
-        blue: 0%
-        red: 100%
-        green: 80%
-        effect: slow_pulse
-    - delay: 5s
-    - script.execute: reset_led
-  on_client_connected:
-    - if:
-        condition:
-          and:
-            - switch.is_on: use_wake_word
-            - binary_sensor.is_off: mute_switch
-        then:
+          - wait_until:
+              - and:
+                  - not:
+                      voice_assistant.is_running:
+                  - not:
+                      speaker.is_playing:
+          - lambda: id(va).set_use_wake_word(false);
           - micro_wake_word.start:
-  on_client_disconnected:
-    - if:
-        condition:
-          and:
-            - switch.is_on: use_wake_word
-            - binary_sensor.is_off: mute_switch
-        then:
-          - voice_assistant.stop:
-          - micro_wake_word.stop:
+    - script.execute: reset_led
   on_error:
     - media_player.play_media: "${error_sound_url}"
     - light.turn_on:
@@ -227,6 +215,28 @@ voice_assistant:
         effect: none
     - delay: 1s
     - script.execute: reset_led
+  on_client_connected:
+    - delay: 2s  # Give the api server time to settle
+    - script.execute: start_wake_word
+  on_client_disconnected:
+    - script.execute: stop_wake_word
+  on_timer_finished:
+    - script.execute: stop_wake_word
+    - wait_until:
+        not:
+          microphone.is_capturing:
+    - switch.turn_on: timer_ringing
+    - light.turn_on:
+        id: top_led
+        red: 0%
+        green: 100%
+        blue: 0%
+        brightness: 100%
+        effect: "Fast Pulse"
+    - wait_until:
+        - switch.is_off: timer_ringing
+    - light.turn_off: top_led
+    - switch.turn_off: timer_ringing
 
 number:
   - platform: template
@@ -314,8 +324,6 @@ binary_sensor:
     on_click:
       - if:
           condition:
-            or:
-              - switch.is_off: use_wake_word
               - binary_sensor.is_on: mute_switch
           then:
             - logger.log:
@@ -447,8 +455,8 @@ script:
             - if:
                 condition:
                   and:
-                    - switch.is_on: use_wake_word
-                    - switch.is_on: flicker_wake_word
+                    - lambda: return id(wake_word_engine_location).state != "On device";
+                    - switch.is_on: use_listen_light
                     - binary_sensor.is_off: mute_switch
                 then:
                   - light.turn_on:
@@ -603,24 +611,46 @@ script:
 
 switch:
   - platform: template
-    name: Use Wake Word
-    id: use_wake_word
+    name: Use listen light
+    id: use_listen_light
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
-    on_turn_on:
-      - script.execute: start_wake_word
-    on_turn_off:
-      - script.execute: stop_wake_word
-  - platform: template
-    name: Wake Word Listening Light
-    id: flicker_wake_word
     entity_category: config
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_ON
     on_turn_on:
       - script.execute: reset_led
     on_turn_off:
       - script.execute: reset_led
+  - platform: template
+    id: timer_ringing
+    optimistic: true
+    restore_mode: ALWAYS_OFF
+    on_turn_off:
+      # Turn off the repeat mode and disable the pause between playlist items
+      - lambda: |-
+              id(onju_out)
+                ->make_call()
+                .set_command(media_player::MediaPlayerCommand::MEDIA_PLAYER_COMMAND_REPEAT_OFF)
+                .set_announcement(true)
+                .perform();
+              id(onju_out)->set_playlist_delay_ms(speaker::AudioPipelineType::ANNOUNCEMENT, 0);
+      # Stop playing the alarm
+      - media_player.stop:
+          announcement: true
+    on_turn_on:
+      # Turn on the repeat mode and pause for 1000 ms between playlist items/repeats
+      - lambda: |-
+            id(onju_out)
+              ->make_call()
+              .set_command(media_player::MediaPlayerCommand::MEDIA_PLAYER_COMMAND_REPEAT_ONE)
+              .set_announcement(true)
+              .perform();
+            id(onju_out)->set_playlist_delay_ms(speaker::AudioPipelineType::ANNOUNCEMENT, 1000);
+      - media_player.speaker.play_on_device_media_file:
+          media_file: timer_finished_wave_file
+          announcement: true
+      - delay: 15min
+      - switch.turn_off: timer_ringing
+
   - platform: gpio
     id: dac_mute
     restore_mode: ALWAYS_OFF
