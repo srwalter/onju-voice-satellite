@@ -11,11 +11,6 @@ ota:
 
 api:
 
-substitutions:
-  wakeup_sound_url: "https://github.com/tetele/onju-voice-satellite/raw/main/res/wakeup.mp3" # New Notification #7 by UNIVERSFIELD https://freesound.org/people/UNIVERSFIELD/sounds/736267/
-  error_sound_url: "https://github.com/tetele/onju-voice-satellite/raw/main/res/error.mp3" # Error #8 by UNIVERSFIELD https://freesound.org/people/UNIVERSFIELD/sounds/734442/
-  timer_finished_sound_url: "https://github.com/tetele/onju-voice-satellite/raw/main/res/timer_finished.mp3" # New Notification #6 by UNIVERSFIELD https://freesound.org/people/UNIVERSFIELD/sounds/734445/
-
 esphome:
   name: "onju-voice"
   name_add_mac_suffix: true
@@ -121,12 +116,16 @@ media_player:
     announcement_pipeline:
         speaker: onju_speaker
         format: WAV
-    codec_support_enabled: false
+    codec_support_enabled: true
     buffer_size: 6000
     volume_min: 0.4
     files:
       - id: timer_finished_wave_file
         file: https://github.com/esphome/wake-word-voice-assistants/raw/main/sounds/timer_finished.wav
+      - id: wakeup_sound
+        file: https://github.com/tetele/onju-voice-satellite/raw/main/res/wakeup.mp3 # New Notification #7 by UNIVERSFIELD https://freesound.org/people/UNIVERSFIELD/sounds/736267/
+      - id: error_sound
+        file: https://github.com/tetele/onju-voice-satellite/raw/main/res/error.mp3 # Error #8 by UNIVERSFIELD https://freesound.org/people/UNIVERSFIELD/sounds/734442/
     on_announcement:
       - if:
           condition:
@@ -221,7 +220,9 @@ voice_assistant:
                   - micro_wake_word.start:
     - script.execute: reset_led
   on_error:
-    - media_player.play_media: "${error_sound_url}"
+    - media_player.speaker.play_on_device_media_file:
+        media_file: error_sound
+        announcement: true
     - light.turn_on:
         id: top_led
         blue: 0%
@@ -709,6 +710,19 @@ select:
 
 micro_wake_word:
   on_wake_word_detected:
+    - if:
+        condition: media_player.is_playing
+        then:
+          - media_player.pause
+    - voice_assistant.stop: 
+    - delay: 200ms
+    - media_player.speaker.play_on_device_media_file:
+        media_file: wakeup_sound
+        announcement: true
+    - delay: 200ms
+    - wait_until:
+        not:
+          media_player.is_playing: onju_out
     - voice_assistant.start:
         wake_word: !lambda return wake_word;
   vad:
