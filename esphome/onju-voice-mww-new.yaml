@@ -714,12 +714,10 @@ micro_wake_word:
         condition: media_player.is_playing
         then:
           - media_player.pause
-    - voice_assistant.stop: 
-    - delay: 200ms
     - media_player.speaker.play_on_device_media_file:
         media_file: wakeup_sound
         announcement: true
-    - delay: 200ms
+    - delay: 400ms
     - wait_until:
         not:
           media_player.is_playing: onju_out
