@@ -373,7 +373,7 @@ binary_sensor:
             - delay: 1s
             - script.execute: reset_led
             - script.wait: reset_led
-            - voice_assistant.start_continuous:
+            - script.execute: start_wake_word
 
   - platform: gpio
     id: mute_switch
